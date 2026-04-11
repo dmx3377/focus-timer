@@ -4,7 +4,7 @@ A simple, distraction-free focus timer built with Kotlin and Jetpack Compose.
 
 Designed for productivity and minimalism.
 
-[![Get from the dmx3377 CDN](https://cdn.dmx3377.uk/get_btn.svg)](https://cdn.dmx3377.uk/focus-timer/v1.apk)
+[![Get from the dmx3377 CDN](https://cdn.dmx3377.uk/get-btn.svg)](https://cdn.dmx3377.uk/focus-timer/v1.apk)
 [![Download Focus Timer](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/focus-timer-dmx/files/latest/download)
 
 ---

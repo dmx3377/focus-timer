@@ -21,4 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Focus Timer"
 include(":app")
- 
+include(":focustimer-wearos")

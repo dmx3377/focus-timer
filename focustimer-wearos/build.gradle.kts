@@ -48,6 +48,11 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.compose.ui.tooling)
     implementation(libs.androidx.wear.tooling.preview)
+    //noinspection UseTomlInstead
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
+    implementation("androidx.compose.material:material-icons-extended:1.7.8")
+    implementation("androidx.wear.compose:compose-material:1.6.1")
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.splashscreen)
     androidTestImplementation(platform(libs.androidx.compose.bom))

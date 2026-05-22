@@ -1,0 +1,101 @@
+name: Android CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: gradle
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      # -------------------------------
+      # Extract semantic version
+      # -------------------------------
+      - name: Extract versionName
+        id: version
+        run: |
+          VERSION=$(grep versionName app/build.gradle | sed 's/.*"\(.*\)".*/\1/')
+          if [[ -z "$VERSION" ]]; then
+            VERSION="0.0.0-${GITHUB_SHA::7}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build release APKs (mobile + wearOS)
+        run: ./gradlew :app:assembleRelease :wearos:assembleRelease
+
+      - name: Decode keystore
+        run: echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 -d > release-keystore.jks
+
+      - name: Sign mobile APK
+        run: |
+          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
+            -keystore release-keystore.jks -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
+            -keypass "${{ secrets.KEY_PASSWORD }}" \
+            app/build/outputs/apk/release/app-release-unsigned.apk "${{ secrets.KEY_ALIAS }}"
+
+      - name: Align mobile APK
+        run: |
+          ZIPALIGN="$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -n1)/zipalign"
+          $ZIPALIGN -v 4 \
+            app/build/outputs/apk/release/app-release-unsigned.apk \
+            app/build/outputs/apk/release/app-release.apk
+
+      - name: Sign wearOS APK
+        run: |
+          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
+            -keystore release-keystore.jks -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
+            -keypass "${{ secrets.KEY_PASSWORD }}" \
+            wearos/build/outputs/apk/release/wearos-release-unsigned.apk "${{ secrets.KEY_ALIAS }}"
+
+      - name: Align WearOS APK
+        run: |
+          ZIPALIGN="$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -n1)/zipalign"
+          $ZIPALIGN -v 4 \
+            wearos/build/outputs/apk/release/wearos-release-unsigned.apk \
+            wearos/build/outputs/apk/release/wearos-release.apk
+
+      # -------------------------------
+      # Create GitHub Release using SemVer
+      # -------------------------------
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload mobile APK
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: app/build/outputs/apk/release/app-release.apk
+          asset_name: app-release.apk
+          asset_content_type: application/vnd.android.package-archive
+
+      - name: Upload WearOS APK
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: wearos/build/outputs/apk/release/wearos-release.apk
+          asset_name: wearos-release.apk
+          asset_content_type: application/vnd.android.package-archive

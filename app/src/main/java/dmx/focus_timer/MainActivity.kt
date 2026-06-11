@@ -219,7 +219,8 @@ fun TimerSetupDialog(
     onDismiss: () -> Unit,
     onStart: (Int) -> Unit
 ) {
-    var customText by remember { mutableStateOf("") }
+    var customMinutes by remember { mutableStateOf("") }
+    var customSeconds by remember { mutableStateOf("") }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -276,23 +277,40 @@ fun TimerSetupDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                OutlinedTextField(
-                    value = customText,
-                    onValueChange = { customText = it },
-                    placeholder = { Text("E.g: 10:00") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(8.dp),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = customMinutes,
+                        onValueChange = { customMinutes = it },
+                        label = { Text("Min") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    OutlinedTextField(
+                        value = customSeconds,
+                        onValueChange = { customSeconds = it },
+                        label = { Text("Sec") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(48.dp))
 
                 Button(
                     onClick = {
-                        val parsedSeconds = parseCustomTime(customText)
-                        if (parsedSeconds != null && parsedSeconds > 0) {
-                            onStart(parsedSeconds)
+                        val m = customMinutes.trim().toIntOrNull() ?: 0
+                        val s = customSeconds.trim().toIntOrNull() ?: 0
+                        val totalSeconds = (m * 60) + s
+                        if (totalSeconds > 0) {
+                            onStart(totalSeconds)
                         }
                     },
                     shape = RoundedCornerShape(8.dp),
@@ -305,22 +323,6 @@ fun TimerSetupDialog(
                 }
             }
         }
-    }
-}
-
-private fun parseCustomTime(input: String): Int? {
-    if (input.isBlank()) return null
-    return try {
-        if (input.contains(":")) {
-            val parts = input.split(":")
-            val m = parts[0].trim().toIntOrNull() ?: 0
-            val s = parts[1].trim().toIntOrNull() ?: 0
-            (m * 60) + s
-        } else {
-            (input.trim().toInt()) * 60
-        }
-    } catch (e: Exception) {
-        null
     }
 }
 

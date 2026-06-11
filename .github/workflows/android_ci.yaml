@@ -66,14 +66,14 @@ jobs:
           jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
             -keystore release-keystore.jks -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
             -keypass "${{ secrets.KEY_PASSWORD }}" \
-            wearos/build/outputs/apk/release/wearos-release-unsigned.apk "${{ secrets.KEY_ALIAS }}"
+            focustimer-wearos/build/outputs/apk/release/focustimer-wearos-release-unsigned.apk "${{ secrets.KEY_ALIAS }}"
 
       - name: Align WearOS APK
         run: |
           ZIPALIGN="$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -n1)/zipalign"
           $ZIPALIGN -v 4 \
-            wearos/build/outputs/apk/release/wearos-release-unsigned.apk \
-            wearos/build/outputs/apk/release/wearos-release.apk
+            focustimer-wearos/build/outputs/apk/release/focustimer-wearos-release-unsigned.apk \
+            focustimer-wearos/build/outputs/apk/release/focustimer-wearos-release.apk
 
       # -------------------------------
       # Create GitHub Release using SemVer
@@ -99,6 +99,6 @@ jobs:
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: wearos/build/outputs/apk/release/wearos-release.apk
-          asset_name: wearos-release.apk
+          asset_path: focustimer-wearos/build/outputs/apk/release/focustimer-wearos-release.apk
+          asset_name: focustimer-wearos-release.apk
           asset_content_type: application/vnd.android.package-archive

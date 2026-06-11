@@ -42,7 +42,7 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build release APKs (mobile + wearOS)
-        run: ./gradlew :app:assembleRelease :wearos:assembleRelease
+        run: ./gradlew :app:assembleRelease :focustimer-wearos:assembleRelease
 
       - name: Decode keystore
         run: echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 -d > release-keystore.jks

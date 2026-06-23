@@ -10,6 +10,7 @@ import android.os.Vibrator
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
@@ -31,8 +32,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
-import androidx.wear.compose.material.*
-import androidx.wear.compose.material.dialog.Dialog
+import androidx.wear.compose.material3.*
+import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
@@ -101,16 +102,24 @@ class TimerViewModel : ViewModel() {
     }
 }
 
-// Renamed from MainActivity to WearOSActivity to match your Manifest
 class WearOSActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
-                Scaffold(
-                    timeText = { TimeText() }
-                ) {
-                    FocusTimerScreen()
+                AppScaffold {
+                    ScreenScaffold(
+                        timeText = { } // Removed to prevent obstructing the timer
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            FocusTimerScreen()
+                        }
+                    }
                 }
             }
         }
@@ -127,8 +136,6 @@ fun FocusTimerScreen(viewModel: TimerViewModel = viewModel()) {
     var showSetupDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    val listState = rememberScalingLazyListState()
-
     LaunchedEffect(timeLeft, isRunning) {
         if (timeLeft == 0 && totalSeconds > 0 && !showFinishedDialog && !isRunning) {
             notifyUser(context)
@@ -136,56 +143,63 @@ fun FocusTimerScreen(viewModel: TimerViewModel = viewModel()) {
         }
     }
 
-    ScalingLazyColumn(
+    val activity = context as? ComponentActivity
+    LaunchedEffect(activity) {
+        val quickStart = activity?.intent?.getStringExtra("QUICK_START_MINUTES")?.toIntOrNull() ?: -1
+        if (quickStart > 0) {
+            viewModel.setDuration(quickStart * 60)
+            if (!viewModel.isRunning.value) {
+                viewModel.toggleTimer()
+            }
+            activity?.intent?.removeExtra("QUICK_START_MINUTES")
+        }
+    }
+
+    // Static layout to avoid layout thrashing during animation
+    Box(
         modifier = Modifier.fillMaxSize(),
-        state = listState,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        contentAlignment = Alignment.Center
     ) {
-        item {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(130.dp)
-                    .padding(top = 16.dp)
+        // Progress ring isolated
+        TimerProgressRing(timeLeft = timeLeft, totalSeconds = totalSeconds)
+
+        // Time Text
+        val minutes = timeLeft / 60
+        val seconds = timeLeft % 60
+        Text(
+            text = "%02d:%02d".format(minutes, seconds),
+            fontSize = 42.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            modifier = Modifier.align(Alignment.Center).offset(y = (-10).dp)
+        )
+
+        // Controls at the bottom
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = { viewModel.resetTimer() },
+                modifier = Modifier.size(36.dp),
+                colors = IconButtonDefaults.filledTonalIconButtonColors()
             ) {
-                val progress = remember(timeLeft, totalSeconds) {
-                    if (totalSeconds > 0) timeLeft.toFloat() / totalSeconds.toFloat() else 1f
-                }
-
-                val animatedProgress by animateFloatAsState(
-                    targetValue = progress,
-                    animationSpec = tween(durationMillis = 100, easing = LinearEasing),
-                    label = "progress_animation"
-                )
-
-                CircularProgressIndicator(
-                    progress = animatedProgress,
-                    modifier = Modifier.fillMaxSize(),
-                    strokeWidth = 6.dp,
-                    indicatorColor = MaterialTheme.colors.primary,
-                    trackColor = MaterialTheme.colors.onSurface.copy(alpha = 0.1f)
-                )
-
-                val minutes = timeLeft / 60
-                val seconds = timeLeft % 60
-
-                Text(
-                    text = "%02d:%02d".format(minutes, seconds),
-                    fontSize = 32.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = "Reset",
+                    modifier = Modifier.size(20.dp)
                 )
             }
-        }
 
-        item {
             Button(
                 onClick = { viewModel.toggleTimer() },
-                modifier = Modifier.size(ButtonDefaults.LargeButtonSize),
-                colors = ButtonDefaults.primaryButtonColors(
-                    backgroundColor = if (isRunning) MaterialTheme.colors.secondary else MaterialTheme.colors.primary
+                modifier = Modifier.size(48.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isRunning) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
                 )
             ) {
                 Icon(
@@ -193,37 +207,17 @@ fun FocusTimerScreen(viewModel: TimerViewModel = viewModel()) {
                     contentDescription = if (isRunning) "Pause" else "Start"
                 )
             }
-        }
 
-        item {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
+            IconButton(
+                onClick = { showSetupDialog = true },
+                modifier = Modifier.size(36.dp),
+                colors = IconButtonDefaults.filledTonalIconButtonColors()
             ) {
-                Button(
-                    onClick = { viewModel.resetTimer() },
-                    modifier = Modifier.size(ButtonDefaults.SmallButtonSize),
-                    colors = ButtonDefaults.secondaryButtonColors()
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Refresh,
-                        contentDescription = "Reset",
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Button(
-                    onClick = { showSetupDialog = true },
-                    modifier = Modifier.size(ButtonDefaults.SmallButtonSize),
-                    colors = ButtonDefaults.secondaryButtonColors()
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Settings,
-                        contentDescription = "Set Length",
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Set Length",
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }
@@ -240,12 +234,12 @@ fun FocusTimerScreen(viewModel: TimerViewModel = viewModel()) {
 
     if (showFinishedDialog) {
         Dialog(
-            showDialog = showFinishedDialog,
             onDismissRequest = { showFinishedDialog = false }
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.9f))
                     .padding(horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
@@ -253,27 +247,49 @@ fun FocusTimerScreen(viewModel: TimerViewModel = viewModel()) {
                 Text(
                     text = "Time's up!",
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colors.primary
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.titleMedium
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "Session finished.",
-                    style = MaterialTheme.typography.body2,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = Color.White
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                Chip(
+                Button(
                     onClick = {
                         showFinishedDialog = false
                         viewModel.resetTimer()
                     },
-                    colors = ChipDefaults.primaryChipColors(),
-                    label = { Text("OK", modifier = Modifier.fillMaxWidth()) },
                     modifier = Modifier.fillMaxWidth(0.8f)
-                )
+                ) {
+                    Text("OK", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                }
             }
         }
     }
+}
+
+@Composable
+fun TimerProgressRing(timeLeft: Int, totalSeconds: Int) {
+    val progress = remember(timeLeft, totalSeconds) {
+        if (totalSeconds > 0) timeLeft.toFloat() / totalSeconds.toFloat() else 1f
+    }
+
+    val animatedProgressState = animateFloatAsState(
+        targetValue = progress,
+        animationSpec = tween(durationMillis = 1000, easing = LinearEasing),
+        label = "progress_animation"
+    )
+
+    CircularProgressIndicator(
+        progress = { animatedProgressState.value },
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(4.dp), // Some padding so it's not flush with the very edge
+        strokeWidth = 6.dp
+    )
 }
 
 @Composable
@@ -289,93 +305,97 @@ fun TimerSetupDialog(
     val listState = rememberScalingLazyListState()
 
     Dialog(
-        showDialog = true,
         onDismissRequest = onDismiss
     ) {
-        if (showCustom) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = "Custom Time",
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colors.primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    // Minutes
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Button(onClick = { customMinutes++ }, modifier = Modifier.size(36.dp), colors = ButtonDefaults.secondaryButtonColors()) { Text("+") }
-                        Text(text = "%02d".format(customMinutes), style = MaterialTheme.typography.title2)
-                        Button(onClick = { if (customMinutes > 0) customMinutes-- }, modifier = Modifier.size(36.dp), colors = ButtonDefaults.secondaryButtonColors()) { Text("-") }
-                    }
-
-                    Text(text = ":", style = MaterialTheme.typography.title2, modifier = Modifier.padding(horizontal = 8.dp))
-
-                    // Seconds
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Button(onClick = { customSeconds = (customSeconds + 5) % 60 }, modifier = Modifier.size(36.dp), colors = ButtonDefaults.secondaryButtonColors()) { Text("+") }
-                        Text(text = "%02d".format(customSeconds), style = MaterialTheme.typography.title2)
-                        Button(onClick = { customSeconds = if (customSeconds - 5 < 0) 55 else customSeconds - 5 }, modifier = Modifier.size(36.dp), colors = ButtonDefaults.secondaryButtonColors()) { Text("-") }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Chip(
-                    onClick = {
-                        val totalSecs = (customMinutes * 60) + customSeconds
-                        if (totalSecs > 0) onStart(totalSecs)
-                     },
-                    colors = ChipDefaults.primaryChipColors(),
-                    label = { Text("Start", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            if (showCustom) {
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth(0.8f)
-                )
-            }
-        } else {
-            ScalingLazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                item {
-                    ListHeader {
-                        Text("Select Duration")
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "Custom Time",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        // Minutes
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Button(onClick = { customMinutes++ }, modifier = Modifier.size(36.dp), colors = ButtonDefaults.filledTonalButtonColors()) { Text("+") }
+                            Text(text = "%02d".format(customMinutes), style = MaterialTheme.typography.titleMedium)
+                            Button(onClick = { if (customMinutes > 0) customMinutes-- }, modifier = Modifier.size(36.dp), colors = ButtonDefaults.filledTonalButtonColors()) { Text("-") }
+                        }
+
+                        Text(text = ":", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 8.dp))
+
+                        // Seconds
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Button(onClick = { customSeconds = (customSeconds + 5) % 60 }, modifier = Modifier.size(36.dp), colors = ButtonDefaults.filledTonalButtonColors()) { Text("+") }
+                            Text(text = "%02d".format(customSeconds), style = MaterialTheme.typography.titleMedium)
+                            Button(onClick = { customSeconds = if (customSeconds - 5 < 0) 55 else customSeconds - 5 }, modifier = Modifier.size(36.dp), colors = ButtonDefaults.filledTonalButtonColors()) { Text("-") }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = {
+                            val totalSecs = (customMinutes * 60) + customSeconds
+                            if (totalSecs > 0) onStart(totalSecs)
+                         },
+                        modifier = Modifier.fillMaxWidth(0.8f)
+                    ) {
+                        Text("Start", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                     }
                 }
+            } else {
+                ScalingLazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    item {
+                        ListHeader {
+                            Text("Select Duration")
+                        }
+                    }
 
-                item {
-                    Chip(
-                        onClick = { showCustom = true },
-                        colors = ChipDefaults.primaryChipColors(),
-                        label = { Text("Custom...", modifier = Modifier.fillMaxWidth()) },
-                        modifier = Modifier
-                            .fillMaxWidth(0.8f)
-                            .padding(vertical = 4.dp)
-                    )
-                }
+                    item {
+                        Button(
+                            onClick = { showCustom = true },
+                            colors = ButtonDefaults.buttonColors(),
+                            modifier = Modifier
+                                .fillMaxWidth(0.8f)
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Text("Custom...", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                        }
+                    }
 
-                items(presets.size) { index ->
-                    val mins = presets[index]
-                    Chip(
-                        onClick = { onStart(mins * 60) },
-                        colors = ChipDefaults.secondaryChipColors(),
-                        label = {
-                            Text("$mins Minutes", modifier = Modifier.fillMaxWidth())
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth(0.8f)
-                            .padding(vertical = 4.dp)
-                    )
+                    items(presets.size) { index ->
+                        val mins = presets[index]
+                        Button(
+                            onClick = { onStart(mins * 60) },
+                            colors = ButtonDefaults.filledTonalButtonColors(),
+                            modifier = Modifier
+                                .fillMaxWidth(0.8f)
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Text("$mins Minutes", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                        }
+                    }
                 }
             }
         }

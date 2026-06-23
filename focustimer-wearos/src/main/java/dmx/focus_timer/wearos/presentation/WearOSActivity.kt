@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -280,6 +281,10 @@ fun TimerSetupDialog(
     onDismiss: () -> Unit,
     onStart: (Int) -> Unit
 ) {
+    var showCustom by remember { mutableStateOf(false) }
+    var customMinutes by remember { mutableStateOf(10) }
+    var customSeconds by remember { mutableStateOf(0) }
+
     val presets = remember { listOf(5, 10, 15, 25, 30, 45, 60) }
     val listState = rememberScalingLazyListState()
 
@@ -287,29 +292,91 @@ fun TimerSetupDialog(
         showDialog = true,
         onDismissRequest = onDismiss
     ) {
-        ScalingLazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            item {
-                ListHeader {
-                    Text("Select Duration")
-                }
-            }
+        if (showCustom) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "Custom Time",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colors.primary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
 
-            items(presets.size) { index ->
-                val mins = presets[index]
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    // Minutes
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Button(onClick = { customMinutes++ }, modifier = Modifier.size(36.dp), colors = ButtonDefaults.secondaryButtonColors()) { Text("+") }
+                        Text(text = "%02d".format(customMinutes), style = MaterialTheme.typography.title2)
+                        Button(onClick = { if (customMinutes > 0) customMinutes-- }, modifier = Modifier.size(36.dp), colors = ButtonDefaults.secondaryButtonColors()) { Text("-") }
+                    }
+
+                    Text(text = ":", style = MaterialTheme.typography.title2, modifier = Modifier.padding(horizontal = 8.dp))
+
+                    // Seconds
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Button(onClick = { customSeconds = (customSeconds + 5) % 60 }, modifier = Modifier.size(36.dp), colors = ButtonDefaults.secondaryButtonColors()) { Text("+") }
+                        Text(text = "%02d".format(customSeconds), style = MaterialTheme.typography.title2)
+                        Button(onClick = { customSeconds = if (customSeconds - 5 < 0) 55 else customSeconds - 5 }, modifier = Modifier.size(36.dp), colors = ButtonDefaults.secondaryButtonColors()) { Text("-") }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 Chip(
-                    onClick = { onStart(mins * 60) },
-                    colors = ChipDefaults.secondaryChipColors(),
-                    label = {
-                        Text("$mins Minutes", modifier = Modifier.fillMaxWidth())
-                    },
+                    onClick = {
+                        val totalSecs = (customMinutes * 60) + customSeconds
+                        if (totalSecs > 0) onStart(totalSecs)
+                     },
+                    colors = ChipDefaults.primaryChipColors(),
+                    label = { Text("Start", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
                     modifier = Modifier
                         .fillMaxWidth(0.8f)
-                        .padding(vertical = 4.dp)
                 )
+            }
+        } else {
+            ScalingLazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                item {
+                    ListHeader {
+                        Text("Select Duration")
+                    }
+                }
+
+                item {
+                    Chip(
+                        onClick = { showCustom = true },
+                        colors = ChipDefaults.primaryChipColors(),
+                        label = { Text("Custom...", modifier = Modifier.fillMaxWidth()) },
+                        modifier = Modifier
+                            .fillMaxWidth(0.8f)
+                            .padding(vertical = 4.dp)
+                    )
+                }
+
+                items(presets.size) { index ->
+                    val mins = presets[index]
+                    Chip(
+                        onClick = { onStart(mins * 60) },
+                        colors = ChipDefaults.secondaryChipColors(),
+                        label = {
+                            Text("$mins Minutes", modifier = Modifier.fillMaxWidth())
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth(0.8f)
+                            .padding(vertical = 4.dp)
+                    )
+                }
             }
         }
     }

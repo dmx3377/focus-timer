@@ -1,11 +1,14 @@
 package dmx.focus_timer
 
+import android.app.Application
 import android.content.Context
 import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.*
@@ -29,6 +32,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -39,7 +43,7 @@ val RedHatMono = FontFamily(
     Font(R.font.redhatmono)
 )
 
-class TimerViewModel : ViewModel() {
+class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private val _totalSeconds = MutableStateFlow(25 * 60)
     val totalSeconds: StateFlow<Int> = _totalSeconds.asStateFlow()
 
@@ -51,6 +55,18 @@ class TimerViewModel : ViewModel() {
 
     private var timerJob: Job? = null
     private var targetEndTimeMillis: Long = 0L
+
+    private var wakeLock: PowerManager.WakeLock? = null
+
+    init {
+        val powerManager = application.getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "FocusTimer::BackgroundWakeLock")
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        wakeLock?.let { if (it.isHeld) it.release() }
+    }
 
     fun setDuration(seconds: Int) {
         pauseTimer()
@@ -74,6 +90,8 @@ class TimerViewModel : ViewModel() {
 
         targetEndTimeMillis = System.currentTimeMillis() + (_timeLeft.value * 1000L)
 
+        wakeLock?.acquire(12 * 60 * 60 * 1000L) // up to 12 hours timeout
+
         timerJob = viewModelScope.launch {
             while (_isRunning.value) {
                 val currentTime = System.currentTimeMillis()
@@ -82,6 +100,8 @@ class TimerViewModel : ViewModel() {
                 if (remainingSeconds <= 0) {
                     _timeLeft.value = 0
                     _isRunning.value = false
+                    notifyUser(getApplication())
+                    wakeLock?.let { if (it.isHeld) it.release() }
                     break
                 }
 
@@ -94,6 +114,7 @@ class TimerViewModel : ViewModel() {
     fun pauseTimer() {
         _isRunning.value = false
         timerJob?.cancel()
+        wakeLock?.let { if (it.isHeld) it.release() }
     }
 
     fun resetTimer() {
@@ -126,7 +147,6 @@ fun FocusTimerScreen(viewModel: TimerViewModel = viewModel()) {
 
     LaunchedEffect(timeLeft) {
         if (timeLeft == 0 && totalSeconds > 0 && !showFinishedDialog && !isRunning) {
-            notifyUser(context)
             showFinishedDialog = true
         }
     }
@@ -332,7 +352,14 @@ private fun notifyUser(context: Context) {
         setOnCompletionListener { release() }
     }
 
-    val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+        vibratorManager.defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    }
+    
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE))
     } else {
